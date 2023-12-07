@@ -1,9 +1,18 @@
 from wordcloud.wordcloud import *
+import jieba
 
-def sample_position(integral_image: IntegralOccupancyMap, size_x, size_y, center: tuple):
+def sample_position(integral_image, size_x, size_y, center: tuple):
     cx, cy = center
     x = integral_image.shape[0]
     y = integral_image.shape[1]
+    def area_avilable(i, j):
+        for p in (i, j, i+size_x, j+size_y):
+            if i < 0 or j < 0 or i+size_x>x-1 or j+size_y>y-1:
+                return False
+        area = integral_image[i, j] + integral_image[i + size_x, j + size_y]
+        area -= integral_image[i + size_x, j] + integral_image[i, j + size_y]
+        if not area:
+            return True
     for r in range(max(x-cx, cx, y-cy, cy)):
         for j in (cy+r, cy-r):
             if j < 0 or j > y:
@@ -11,17 +20,28 @@ def sample_position(integral_image: IntegralOccupancyMap, size_x, size_y, center
             for i in range(cx-r, cx+r):
                 if i < 0 or i > x:
                     continue
-                position = (i, j)
-        for i in (cx+i, cx-i):
+                if area_avilable(i, j):
+                    return i, j
+        for i in (cx+r, cx-r):
             if i < 0 or i > x:
                 continue
             for j in range(cy-r, cy+r):
                 if j < 0 or j > y:
                     continue
-                position = (i, j)
+                if area_avilable(i, j):
+                    return i, j
     
 
 class WC(WordCloud):
+    
+    def process_text(self, text: str):
+        words = jieba.cut(text)
+        if self.stopwords:
+            words = [w for w in words if w not in self.stopwords]
+        freqs = [(w, 1) for w in words]
+        return freqs
+        
+        
     
     def generate_from_frequencies(self, frequencies, max_font_size=None):  # noqa: C901
         """Create a word_cloud from words and frequencies.
@@ -40,10 +60,11 @@ class WC(WordCloud):
 
         """
         # make sure frequencies are sorted and normalized
-        frequencies = sorted(frequencies.items(), key=lambda x:x[1], reverse=True)
+        # frequencies = sorted(frequencies.items(), key=lambda x:x[1], reverse=True)
         if len(frequencies) <= 0:
             raise ValueError("We need at least 1 word to plot a word cloud, "
                              "got %d." % len(frequencies))
+        print(type(frequencies))
         frequencies = frequencies[:self.max_words]
 
         # largest entry will be 1
@@ -85,7 +106,8 @@ class WC(WordCloud):
                 # we only have one word. We make it big!
                 font_size = self.height
             else:
-                self.generate_from_frequencies(dict(frequencies[:2]),
+                fqs = sorted(frequencies, key=lambda x:x[1], reverse=True)
+                self.generate_from_frequencies(fqs[:20],
                                                max_font_size=self.height)
                 # find font sizes
                 sizes = [x[1] for x in self.layout_]
@@ -120,6 +142,7 @@ class WC(WordCloud):
                                     for word, freq in frequencies_org])
 
         # start drawing grey image
+        pre_position = (random_state.randint(1, height), random_state.randint(1, width))
         for word, freq in frequencies:
             if freq == 0:
                 continue
@@ -133,6 +156,7 @@ class WC(WordCloud):
             else:
                 orientation = Image.ROTATE_90
             tried_other_orientation = False
+            
             while True:
                 if font_size < self.min_font_size:
                     # font-size went too small
@@ -145,9 +169,9 @@ class WC(WordCloud):
                 # get size of resulting text
                 box_size = draw.textbbox((0, 0), word, font=transposed_font, anchor="lt")
                 # find possible places using integral image:
-                result = occupancy.sample_position(box_size[3] + self.margin,
+                result = sample_position(occupancy.integral,box_size[3] + self.margin,
                                                    box_size[2] + self.margin,
-                                                   random_state)
+                                                   pre_position)
                 if result is not None:
                     # Found a place
                     break
@@ -166,6 +190,7 @@ class WC(WordCloud):
                 break
 
             x, y = np.array(result) + self.margin // 2
+            pre_position = result
             # actually draw the text
             draw.text((y, x), word, fill="white", font=transposed_font)
             positions.append((x, y))
