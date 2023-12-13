@@ -16,7 +16,15 @@ links =[]
 
 group = 0
 nid = 0
-for word,head in zip(r[0]['word'], r[0]['head']):
+
+def node_val(dep):
+    if dep in ('SBV', 'VOB'):
+        nodevalue = 3
+    else:
+        nodevalue = 1
+    return nodevalue
+
+for word,head,dep in zip(r[0]['word'], r[0]['head'], r[0]['deprel']):
     nid += 1
     if word in splitors:
         group += 1
@@ -25,17 +33,20 @@ for word,head in zip(r[0]['word'], r[0]['head']):
             'source': nid -1,
             'target': nid,
             'curve': 0,
+            'val': 5,
         })
     nodes.append({
         'id': nid, 
         'group': group,
         'label': word,
+        'val': node_val(dep)
     })
     if head > 0:
         links.append({
             'source': head,
             'target': nid,
-            'curve': 0.6
+            'val': 0.1,
+            'curve': 0.9
         })
 
 data = {
